@@ -1,0 +1,99 @@
+burloc-crawler
+----------------------
+
+This is a quick and dirty /simple/ (minded?) web crawler. It respects 
+robots.txt, and can be scaled fairly well across several machines thanks 
+to the magic of celery and rabbitmq.
+
+Please acquire more beer first if you're planning to use this for something 
+serious, it will make it a more tolerable experience..
+
+It uses: 
+	- urllib2 for document fetching
+	- celery for task distribution
+	- rabbitmq as the default message broker
+	- beautifulsoup to extract links from html, even if the html is badly 
+	  written
+	- urlparse to make urls absolute, and to extract domain names
+
+To use the crawler:
+
+1) Start rabbitmq
+
+2) If you're planning to run workers outside the local computer:
+	- edit celeryconfig.py to point to the ip/hostname where you are 
+	  running the rabbitmq server.
+	- copy the program to the worker nodes
+
+3) Start celeryd in the crawler foler on the worker nodes.
+
+4) run your modified version of example.py
+
+
+Examples
+----------------------------------
+
+Output of a test-run with a (too) low crawl-delay:
+
+	Suspended crawl to 1298964969.suspended_crawl
+	Downloaded bytes: 2603580
+	Discovered links: 1449
+	Discovered domains: 102
+	Runtime: 40.9467639923 seconds
+	Most prolific referrer was www. --- .com with an average of
+	50.0 outgoing links per page.
+
+To explore the results, fire up an interactive python terminal and run:
+
+	>>> from crawler import resume
+	>>> crawler = resume("1298964969.suspended_crawl")
+
+For example, these might be interesting:
+
+	>>> print crawler.domains.keys()
+	>>> print crawler.urls.values()
+
+To resume the crawling process:
+
+	>>> crawler.crawl()
+
+
+To resume a killed crawler outside of the python shell, call the script 
+with --resume filename
+
+Assumptions, limitations, improvements
+--------------------------------------
+
+Assumptions:
+- Web consists only of html (!)
+- We don't need to get every single document, there's always others..
+- Only http results of interest (optional https without cert checking available
+  with by passing schemes = ["http","https"] to crawler
+- We're crawling a small subset of the internet so keeping some stuff in memory is ok.
+- The goal was not to reimplement Googlebot in a few days :)
+
+Good stuff:
+- The crawler can add and remove workers while running
+- RabbitMQ can be clustered, live (thanks Erlang..)
+- Respects robots.txt (optionally..) including craw-delay, fetches this asynchronosly
+  and delays further crawling of domain until robots.txt is parsed or found missing
+- Can be restricted to crawling specific domains
+- Accepts custom stopping criteria in the form of a function which can inspect the 
+  crawl state
+- In case of a crash, kill or completion, crawl state is saved so it can either be 
+  resumed or inspected to find any problems.
+- Crawls pretty fast after ramp-up
+
+Limitations:
+- The document ranking function is probably quite bad (it's no PageRank)
+- The crawl oversight process is not distributed (but has been found capable of
+  keeping up with hundreds of workers)
+- Too much info is kept in memory for this to be usable on a grand scale,
+  but it lets us get statistics easily
+- Doesn't reuse connections (this is bad)
+
+Suggested improvements:
+- Crawl oversight should be made distributed
+- Decouple link structure data storage from crawling
+- Change to urllib3 to reuse connections
+- Do more to avoid blocking on robots.txt fetching
