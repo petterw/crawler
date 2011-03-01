@@ -25,7 +25,7 @@ To use the crawler:
 	  running the rabbitmq server.
 	- copy the program to the worker nodes
 
-3) Start celeryd in the crawler foler on the worker nodes.
+3) Start celeryd in the crawler folder on the worker nodes.
 
 4) run your modified version of example.py
 
