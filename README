@@ -1,4 +1,4 @@
-burloc-crawler
+burlock-crawler
 ----------------------
 
 This is a quick and dirty /simple/ (minded?) web crawler. It respects 
@@ -68,7 +68,7 @@ Assumptions:
 - Web consists only of html (!)
 - We don't need to get every single document, there's always others..
 - Only http results of interest (optional https without cert checking available
-  with by passing schemes = ["http","https"] to crawler
+  by passing schemes = ["http","https"] to crawler
 - We're crawling a small subset of the internet so keeping some stuff in memory is ok.
 - The goal was not to reimplement Googlebot in a few days :)
 
