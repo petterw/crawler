@@ -1,6 +1,3 @@
-crawler
-----------------------
-
 This is a quick and dirty /simple/ (minded?) web crawler. It respects 
 robots.txt, and can be scaled fairly well across several machines thanks 
 to the magic of celery and rabbitmq.
