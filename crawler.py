@@ -14,10 +14,12 @@ class Crawler:
 		schemes = ["http"], # link types to follow
 		crawl_domains = [], # optionally, restrict the crawler to these domains
 		pass_time = 0.1, # how long to wait after each crawl management pass
-		concurrent_fetchers = 20): # The number of documents that may be scheduled for
-		# fetching at the same time. Don't set this above the number of celery worker
-		# processes.
-
+		document_fetchers = 15, 
+		robots_txt_fetchers = 5):
+		# The number of documents that may be scheduled for fetching concurrently
+		# + the number of robots txt fetchers should not exceed the number of celery
+		# workers.
+		
 		#config import
 		self.seed = seed
 		self.robots_txt_name = robots_txt_name
@@ -26,8 +28,8 @@ class Crawler:
 		self.default_crawl_delay = default_crawl_delay
 		self.schemes = schemes
 		self.crawl_domains = crawl_domains
-		self.concurrent_fetchers = concurrent_fetchers
-
+		self.document_fetchers = document_fetchers
+		self.robots_txt_fetchers = robots_txt_fetchers
 		#setup
 		self.pass_time = pass_time
 		
@@ -134,7 +136,7 @@ class Crawler:
 	def start_new_retrievals(self):
 		""" Consider crawling some new urls from queue: """
 		
-		if self.concurrent_fetchers - len(self.in_progress_queue) > 0:
+		if self.document_fetchers - len(self.in_progress_queue) > 0:
 			
 			if self.new_links:
 				self.candidate_queue.sort(key=self.rank)
@@ -153,10 +155,10 @@ class Crawler:
 						doc.retrieve()
 						self.in_progress_queue.append(doc)
 				else:
-					if not doc.domain in self.robots_txt_wait_queue:
+					if not doc.domain in self.robots_txt_wait_queue and self.robots_txt_fetchers - len(self.robots_txt_wait_queue) > 0:
 						doc.domain.setup_robots_txt()
 						self.robots_txt_wait_queue.append(doc.domain)
-				if self.concurrent_fetchers - len(self.in_progress_queue) == 0:
+				if self.document_fetchers - len(self.in_progress_queue) == 0:
 					break
 	
 	def check_progress(self):	

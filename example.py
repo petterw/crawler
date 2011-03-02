@@ -13,7 +13,8 @@ def crawl(c = None):
 			seed = [], # your seed urls here 
 			default_crawl_delay = 20, 
 			obey_robots_txt = True,
-			concurrent_fetchers = 20) #start at least this many celery workers
+			document_fetchers = 15,
+			robots_txt_fetchers = 5) #start at least this many celery workers
 	
 	try:
 		# start crawling, with this tasks specific termination criteria and 
