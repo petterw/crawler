@@ -13,7 +13,8 @@ class Crawler:
 		obey_robots_txt = True, # Be nice?
 		schemes = ["http"], # link types to follow
 		crawl_domains = [], # optionally, restrict the crawler to these domains
-		concurrent_fetchers = 1): # The number of documents that may be scheduled for
+		pass_time = 0.1, # how long to wait after each crawl management pass
+		concurrent_fetchers = 20): # The number of documents that may be scheduled for
 		# fetching at the same time. Don't set this above the number of celery worker
 		# processes.
 
@@ -28,21 +29,29 @@ class Crawler:
 		self.concurrent_fetchers = concurrent_fetchers
 
 		#setup
-		self.wait_time = 0.1
+		self.pass_time = pass_time
+		
+		# stuff we discover while crawling:
 		self.urls = {}
 		self.links = {}
 		self.domains = {}
-		self.url_extraction_queue = []
-		self.retrieval_queue = []
-		self.retrieval_in_progress = []
 		self.results = {None:None}
-		self.done = False
-		self.started = False
+		
+		# queues for crawl management
+		self.result_queue = []
+		self.candidate_queue = []
+		self.in_progress_queue = []
+		self.robots_txt_wait_queue = []
+		
+		# for statistics
 		self.start_stop_tuples = [(time.time(), -1)]
 
 		# to avoid having a website starve the crawling process with excessive crawl delays:
-		self.too_far_ahead_to_schedule = timedelta(seconds=self.wait_time)
+		self.too_far_ahead_to_schedule = timedelta(seconds=self.pass_time)
 
+		# Let's try to avoid sorting the retrieval candidate queue if possible
+		self.new_links = True
+		
 	def add_url(self, url_tuple):
 		""" add a url to the retrieval queue, without starting to download it
 			This creates a Domain instance if the domain hasn't been seen before,
@@ -73,87 +82,99 @@ class Crawler:
 									 self.results[url_tuple[1]],
 									 self.domains[dname])
 				# add url to list of candidates for retrieval
-				self.retrieval_queue.append(document)
+				self.candidate_queue.append(document)
 				# keep track of Document
 				self.results[url_tuple[0]] = document
-
 			else:
 				#if we have seen this url before, we just track the extra incoming link
 				self.results.get(url_tuple[0]).add_referrer(self.results[url_tuple[1]])
 
-	def crawl(self, save_frequency = None, termination_checker = lambda c: False):
+	def crawl(self, save_frequency = timedelta(seconds = 60), termination_checker = lambda c: False):
 		""" Start crawl. Default termination checker says to never stop.
 			Plug your own in that says otherwise if this is wanted.
 		"""
-		# Add seed urls to queue if we're not resuming a suspended crawl
-		if not self.started:
-			for s in self.seed:
-				self.add_url((s, None))
-			#prevent resuming of crawl from re-adding seeds
-			self.started = True
-
-		# To allow resuming even after we were done the first time:
-		self.done = False
-
+		
+		# Add seed urls to queue		
+		while len(self.seed) > 0:
+			self.add_url((self.seed.pop(0), None))
+		
 		# Setup tracking of last periodic save time
-		if save_frequency != None:
-			last_save = datetime.now() - save_frequency
-
+		last_save = datetime.now() - save_frequency
+		
 		# start of crawling:
 		# yes we are managing the crawling process with polling.
 		# celery would do so internally anyway, and we want more control
-		while not self.done:
-			# make a best effort attempt to save the state periodically
-			if save_frequency != None and save_frequency + last_save < datetime.now():
+		while not termination_checker(self) and not self.out_of_work():
+			
+			# make an attempt to save the state periodically
+			if save_frequency + last_save < datetime.now():
 				print "Periodic save made to " + self.suspend()
 				last_save = datetime.now()
-			# Bool which is checked to avoid sorting the potentially large
-			# retrieval queue if possible
-			new_links = False
-
-			""" Consider moving crawled documents from in progress queue to
-				url extraction queue, or remove them from crawling altogether
-				if we were blocked by robots.txt
-			"""
-			for doc in self.retrieval_in_progress:
-				if doc.blocked:
-					# robots.txt block => remove so we don't starve the crawl process
-					self.retrieval_in_progress.remove(doc)
-				if doc.task.ready() and doc.task.result[2].ready():
-					self.retrieval_in_progress.remove(doc)
-					self.url_extraction_queue.append(doc)
-
-			""" Consider adding urls from result to crawling queue """
-			self.url_extraction_queue.sort(key=self.rank)
-			for doc in self.url_extraction_queue:
-				self.url_extraction_queue.remove(doc)
-				if len(doc.get_contents()[2].result) > 0:
-					new_links = True
+			
+			self.check_progress()
+			self.process_results()
+			self.start_new_retrievals()
+			
+			# avoid checking progress too often
+			time.sleep(self.pass_time)
+			
+	def process_results(self):
+		""" Consider adding urls from result to crawling queue """
+		for doc in self.result_queue:
+			self.result_queue.remove(doc)
+			if len(doc.get_contents()[2].result) > 0:
+				self.new_links = True
 				for url_tuple in doc.get_contents()[2].result:
 					if self.links.get(doc.url)==None:
 						self.links[doc.url] = [url_tuple[0]]
 					else:
 						self.links[doc.url] = self.links[doc.url] + [url_tuple[0]]
 					self.add_url(url_tuple)
+				
+	def start_new_retrievals(self):
+		""" Consider crawling some new urls from queue: """
+		
+		if self.concurrent_fetchers - len(self.in_progress_queue) > 0:
+			
+			if self.new_links:
+				self.candidate_queue.sort(key=self.rank)
+			
+			for domain in self.robots_txt_wait_queue:
+				if domain.robots_txt_task.ready():
+					self.robots_txt_wait_queue.remove(domain)
+					domain.parse_robots_txt()
+			
+			for doc in self.candidate_queue:	
+				# if we're not allowed to crawl the site before the next crawl management pass,
+				# skip it to avoid starving the crawling process with waiting workers
+				if doc.domain.robots_txt_in_place():
+					if self.within_scheduling_scope(doc):
+						self.candidate_queue.remove(doc)
+						doc.retrieve()
+						self.in_progress_queue.append(doc)
+				else:
+					if not doc.domain in self.robots_txt_wait_queue:
+						doc.domain.setup_robots_txt()
+						self.robots_txt_wait_queue.append(doc.domain)
+				if self.concurrent_fetchers - len(self.in_progress_queue) == 0:
+					break
+	
+	def check_progress(self):	
+		""" Consider moving crawled documents from in progress queue to
+			url extraction queue, or remove them from crawling altogether
+			if we were blocked by robots.txt
+		"""
+		for doc in self.in_progress_queue:
+			if doc.blocked:
+				# robots.txt block => remove so we don't starve the crawl process
+				self.in_progress_queue.remove(doc)
+			if doc.task.ready() and doc.task.result[2].ready():
+				self.in_progress_queue.remove(doc)
+				self.result_queue.append(doc)
 
-			""" Consider crawling some new urls from queue: """
-			if self.concurrent_fetchers - len(self.retrieval_in_progress) > 0:
-				if new_links:
-					self.retrieval_queue.sort(key=self.rank)
-				for doc in self.retrieval_queue:
-					self.retrieval_queue.remove(doc)
-					doc.retrieve()
-					self.retrieval_in_progress.append(doc)
-					if self.concurrent_fetchers - len(self.retrieval_in_progress) == 0:
-						break
-
-			# avoid checking progress too often
-			time.sleep(self.wait_time)
-
-			# Are we done, or out of work? (no links to follow, waiting for 0 results)
-			if termination_checker(self) or (len(self.retrieval_queue) == 0 and len(self.retrieval_in_progress) == 0 and len(self.url_extraction_queue) == 0):
-				self.done = True
-
+	def within_scheduling_scope(self,document):
+		return not document.domain.too_long_until_crawl(too_long = self.too_far_ahead_to_schedule)
+		
 	def suspend(self):
 		""" Suspends crawl to file and returns filename """
 		# store stop time
@@ -163,18 +184,16 @@ class Crawler:
 		pickle.dump(self, f)
 		f.close()
 		return filename
-
+		
+	def out_of_work(self):
+		return (len(self.candidate_queue) == 0 and len(self.in_progress_queue) == 0 and len(self.result_queue) == 0)
+		
 	def rank(self, document):
 		""" Assigns score to a document, used for sorting retrieval queue to find next
 			urls to crawl. This is probably not the best ranking method but hey.. WIP^TM
 		"""
 		# if nobody thinks the site is worth linking to, then who are we to argue?
 		if len(document.referrers) == 0:
-			return 0.0
-
-		# if we're not allowed to crawl the site before the next crawl management pass,
-		# assign a low score to avoid starving the crawling process with waiting workers
-		if not document.domain.robots_txt_task.ready() or document.domain.too_long_until_crawl(too_long = self.too_far_ahead_to_schedule):
 			return 0.0
 
 		# assign a score based on who links to the document
@@ -282,7 +301,7 @@ class Domain:
 		""" take our async result and parse it (blocking) """
 		self.rp.parse(self.robots_txt_task.wait()[1])
 		if self.rp.get_crawl_delay(self.crawler.robots_txt_name) != None:
-				self.crawl_delay = max(timedelta(seconds = self.rp.get_crawl_delay(self.crawler.robots_txt_name)), self.crawl_delay)
+			self.crawl_delay = max(timedelta(seconds = self.rp.get_crawl_delay(self.crawler.robots_txt_name)), self.crawl_delay)
 		self.parsed_robots_txt = True
 
 	def __eq__(self,other):
@@ -303,7 +322,10 @@ class Domain:
 			self.parse_robots_txt()
 		self.last_crawl_time = self.last_crawl_time + self.crawl_delay
 		return self.last_crawl_time
-
+		
+	def robots_txt_in_place(self):
+		return not self.crawler.obey_robots_txt or (not self.rp.is_expired() and self.parsed_robots_txt)
+		
 	def defer_crawl(self):
 		""" Undo claim of crawl time """
 		self.last_crawl_time = self.last_crawl_time - self.crawl_delay
