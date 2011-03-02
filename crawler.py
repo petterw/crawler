@@ -7,8 +7,8 @@ class Crawler:
 	"""
 	def __init__(self, 
 		seed, # The initial list of urls to visit
-		robots_txt_name = "burlock", # which useragent to obey rules for in robots.txt
-		useragent_string = "burlock", # useragent string to send when crawling
+		robots_txt_name = "crawler", # which useragent to obey rules for in robots.txt
+		useragent_string = "crawler", # useragent string to send when crawling
 		default_crawl_delay = 20, # the minimum time between each fetch from each domain
 		obey_robots_txt = True, # Be nice?
 		schemes = ["http"], # link types to follow

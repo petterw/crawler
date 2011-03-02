@@ -1,5 +1,5 @@
 """
-An example invocation of burloc-crawler
+An example invocation of the crawler
 """
 
 import sys, getopt, time
