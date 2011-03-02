@@ -1,4 +1,4 @@
-import fetcher, time, urlparse, robotexclusionrulesparser, pickle
+import fetcher, time, urlparse, robotexclusionrulesparser, pickle, os
 from datetime import datetime, timedelta
 
 class Crawler:
@@ -15,7 +15,8 @@ class Crawler:
 		crawl_domains = [], # optionally, restrict the crawler to these domains
 		pass_time = 0.1, # how long to wait after each crawl management pass
 		document_fetchers = 15, 
-		robots_txt_fetchers = 5):
+		robots_txt_fetchers = 5,
+		outputdir = "output"):
 		# The number of documents that may be scheduled for fetching concurrently
 		# + the number of robots txt fetchers should not exceed the number of celery
 		# workers.
@@ -30,6 +31,7 @@ class Crawler:
 		self.crawl_domains = crawl_domains
 		self.document_fetchers = document_fetchers
 		self.robots_txt_fetchers = robots_txt_fetchers
+		self.outputdir = outputdir
 		#setup
 		self.pass_time = pass_time
 		
@@ -181,10 +183,16 @@ class Crawler:
 		return not document.domain.too_long_until_crawl(too_long = self.too_far_ahead_to_schedule)
 		
 	def suspend(self):
+		if not os.path.exists(self.outputdir):
+			os.makedirs(self.outputdir)
+		thisrun = self.outputdir + os.sep + str(int(self.start_stop_tuples[0][0]))
+		if not os.path.exists(thisrun):
+			os.makedirs(thisrun)
+		
 		""" Suspends crawl to file and returns filename """
 		# store stop time
 		self.start_stop_tuples.append( (self.start_stop_tuples.pop()[0], time.time()) )
-		filename = str(int(time.time()))+".suspended_crawl"
+		filename = thisrun + os.sep + str(int(time.time()))+".suspended_crawl"
 		f = open(filename,"w")
 		pickle.dump(self, f)
 		f.close()
@@ -260,10 +268,14 @@ class Document:
 		try:
 			self.contents
 		except:
-			print "<<< " + self.url
+			try:    
+				print "<<< " + self.url
+			except UnicodeEncodeError:
+				print "<<< (unable to decode url to ascii)"
 			self.contents = self.task.wait()
 			self.domain.downloaded += self.contents[3]
 			self.domain.downloaded_count += 1
+			
 		return self.contents
 
 	def add_referrer(self, referrer):
@@ -363,8 +375,3 @@ def resume(suspended_crawl):
 	# store start time
 	crawler.start_stop_tuples.append( (time.time(), -1) )
 	return crawler
-
-""" Our very own exception """
-class CrawlingError(Exception):
-	def __init__(self,msg):
-		self.msg = msg

@@ -34,6 +34,7 @@ def crawl(c = None, seed = []):
 		print "Discovered domains: " + str(cstats.discovered_domains(c))
 		print "Runtime: " + str(cstats.runtime(c)) + " seconds"
 		maxref = cstats.most_prolific_referer(c)
+		# utf-8 printing problem in domain?
 		print "Most prolific referrer was " + maxref["name"] + " with an average of " + str(maxref["avg_links_per_page"]) + " outgoing links per page."+"\n"
 
 def example_task_termination_checker(crawler):
