@@ -119,6 +119,9 @@ class Crawler:
 			
 			# avoid checking progress too often
 			time.sleep(self.pass_time)
+		print "\nStopping.."
+		print "Out of work: " + str(self.out_of_work())
+		print "Termination criteria reached: " + str(termination_checker(self))
 			
 	def process_results(self):
 		""" Consider adding urls from result to crawling queue """

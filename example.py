@@ -1,16 +1,15 @@
 """
 An example invocation of the crawler
 """
-
 import sys, getopt, time
 from datetime import timedelta
 from crawler import Crawler, resume
 import cstats
 
-def crawl(c = None):
+def crawl(c = None, seed = []):
 	if c == None:
 		c = Crawler(
-			seed = [], # your seed urls here 
+			seed = seed, # your seed urls here 
 			default_crawl_delay = 20, 
 			obey_robots_txt = True,
 			document_fetchers = 15,
@@ -27,7 +26,7 @@ def crawl(c = None):
 		
 		# if we were killed or finished, suspend crawl state to file.
 		# revive the crawl with resume from crawler.py to explore results
-		print "\n\n\nSuspended crawl to " + c.suspend()
+		print "\nSuspended crawl to " + c.suspend()
 		
 		# print some statistics
 		print "Downloaded bytes: " + str(cstats.downloaded_bytes(c))
@@ -48,13 +47,20 @@ def example_task_termination_checker(crawler):
 def main(argv=None):
 	if argv is None:
 		argv = sys.argv
-	if len(argv) == 3 and argv[1] == "--resume" and argv[2].find("suspended_crawl") > -1:
-		print "Resuming crawl from " + argv[2]
-		c = resume(argv[2])
-		crawl(c)
+	if len(argv) >= 3:
+		if len(argv) == 3:
+			#resume crawl
+			if argv[1] == "--resume" and argv[2].find("suspended_crawl") > -1:
+				print "Resuming crawl from " + argv[2]
+				c = resume(argv[2])
+				crawl(c)
+		if argv[1] == "--seed":
+			#start new crawl
+			print "Starting new crawl with " + str(argv[2:])
+			crawl(c = None, seed = argv[2:])
 	else:
-		print "Starting new crawl"
-		crawl()
+		#help
+		print "Invoke this script with either --seed url1 url2 ... or --resume a_suspended_crawl_file"
 	
 
 if __name__ == "__main__":
