@@ -40,7 +40,7 @@ Output of a test-run with a (too) low crawl-delay:
 	Most prolific referrer was www. --- .com with an average of
 	50.0 outgoing links per page.
 
-To explore the results, fire up an interactive python terminal and run:
+To explore the results, fire up an interactive python shell and run:
 
 	>>> from crawler import resume
 	>>> crawler = resume("1298964969.suspended_crawl")
