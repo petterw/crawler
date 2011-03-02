@@ -45,7 +45,7 @@ def extract_urls(doc_tuple):
 
 def cleanup_url(url):
 	# quick fix for a problem urlparse has with utf-8
-	return url.split("#".encode("utf-8"))[0]
+	return url.split("#".encode("utf-8"))[0].encode("utf-8")
 
 class FakeAsyncResult:
 	""" Limited placeholder for AsyncResult from celery, in case we don't want 
