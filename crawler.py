@@ -145,6 +145,7 @@ class Crawler:
 			
 			if self.new_links:
 				self.candidate_queue.sort(key=self.rank)
+				self.new_links = False
 			
 			for domain in self.robots_txt_wait_queue:
 				if domain.robots_txt_task.ready():
@@ -183,13 +184,13 @@ class Crawler:
 		return not document.domain.too_long_until_crawl(too_long = self.too_far_ahead_to_schedule)
 		
 	def suspend(self):
+		""" Suspends crawl to file and returns filename """
 		if not os.path.exists(self.outputdir):
 			os.makedirs(self.outputdir)
 		thisrun = self.outputdir + os.sep + str(int(self.start_stop_tuples[0][0]))
 		if not os.path.exists(thisrun):
 			os.makedirs(thisrun)
 		
-		""" Suspends crawl to file and returns filename """
 		# store stop time
 		self.start_stop_tuples.append( (self.start_stop_tuples.pop()[0], time.time()) )
 		filename = thisrun + os.sep + str(int(time.time()))+".suspended_crawl"
