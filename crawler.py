@@ -109,6 +109,7 @@ class Crawler:
 		# yes we are managing the crawling process with polling.
 		# celery would do so internally anyway, and we want more control
 		while not termination_checker(self) and not self.out_of_work():
+			pass_start = time.time()
 			
 			# make an attempt to save the state periodically
 			if save_frequency + last_save < datetime.now():
@@ -120,7 +121,7 @@ class Crawler:
 			self.start_new_retrievals()
 			
 			# avoid checking progress too often
-			time.sleep(self.pass_time)
+			time.sleep(max(0.0, min(self.pass_time, time.time() - pass_start)))
 		print "\nStopping.."
 		print "Out of work: " + str(self.out_of_work())
 		print "Termination criteria reached: " + str(termination_checker(self))
