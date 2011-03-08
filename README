@@ -1,11 +1,11 @@
-This is a quick and dirty /simple/ (minded?) web crawler. It respects 
+This is a quick and dirty /simple/ web crawler. It tries to respect 
 robots.txt, and can be scaled fairly well across several machines thanks 
 to the magic of celery and rabbitmq.
 
 Please acquire more beer first if you're planning to use this for something 
 serious, it will make it a more tolerable experience..
 
-It uses: 
+Libraries: 
 	- urllib2 for document fetching
 	- celery for task distribution
 	- rabbitmq as the default message broker
@@ -24,7 +24,7 @@ To use the crawler:
 
 3) Start celeryd in the crawler folder on the worker nodes.
 
-4) run your modified version of example.py
+4) run example.py --seed url1 url2 ur3 ...
 
 
 Examples
@@ -87,10 +87,13 @@ Limitations:
   keeping up with hundreds of workers)
 - Too much info is kept in memory for this to be usable on a grand scale,
   but it lets us get statistics easily
-- Doesn't reuse connections (this is bad)
+- Doesn't reuse connections
 
 Suggested improvements:
 - Crawl oversight should be made distributed
 - Decouple link structure data storage from crawling
-- Change to urllib3 to reuse connections
-- Do more to avoid blocking on robots.txt fetching
+- Change to urllib3 to reuse connections (then again, maybe not, this would make us have to
+  track which worker is talking to which server)
+- Make your own crawler.rank(document) and termination criteria
+- WARNING: uses pickle, which is unsafe on data from untrusted sources. Write some other method of saving
+  state!
