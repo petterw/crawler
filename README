@@ -1,6 +1,7 @@
-This is a quick and dirty /simple/ web crawler. It tries to respect 
-robots.txt, and can be scaled fairly well across several machines thanks 
-to the magic of celery and rabbitmq.
+This is a quick and dirty /simple/ web crawler, and a work in progress. 
+If you want it to do anything besides discover new links, you will need to 
+write some code. It tries to respect robots.txt, and can be scaled fairly well 
+across several machines thanks to the magic of celery and rabbitmq.
 
 Please acquire more beer first if you're planning to use this for something 
 serious, it will make it a more tolerable experience..
