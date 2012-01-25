@@ -359,7 +359,10 @@ class Domain:
 		# some more thought needs to go into how to avoid blocking on robots.txt
 		if not self.parsed_robots_txt:
 			self.parse_robots_txt()
-		return self.rp.is_allowed(self.crawler.robots_txt_name, urlparse.urlparse(url)[2])
+		try:
+			return self.rp.is_allowed(self.crawler.robots_txt_name, urlparse.urlparse(url)[2])
+		except UnicodeDecodeError:
+			return False
 
 	def too_long_until_crawl(self, too_long):
 		""" Avoid starvation of crawling process """
